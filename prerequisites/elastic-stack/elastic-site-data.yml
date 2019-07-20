@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  namespace: logging
+  name: elastic-site-data
+data:
+  # Add your site name and cluster name here to separate documents within the
+  # Elastic Stack
+  site_name: "site"
+  kubernetes_cluster_name: "cluster"

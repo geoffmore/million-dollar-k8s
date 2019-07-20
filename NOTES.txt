@@ -1,0 +1,6 @@
+Originally, fields_under_root was going to be set to true, but I think having
+this additional fields under a fields key allows easy distinction between native
+and non-native fields
+
+I need a way to ensure all beats versions are the same and all of them are
+captured under an index pattern and index template

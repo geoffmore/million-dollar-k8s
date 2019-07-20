@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: elastic-cloud-auth
+stringData:
+  cloud_id: "id:string"
+  # What are the minimum permissions needed on this elastic account?
+  cloud_auth: "elastic:password"
+type: Opaque

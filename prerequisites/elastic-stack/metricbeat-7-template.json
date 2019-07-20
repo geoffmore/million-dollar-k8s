@@ -1,0 +1,20 @@
+PUT _template/metricbeat_7
+{
+  /*
+  In single-node environments, the cluster cannot assign replicas, so this is set to 0. order is set to the lowest value to allow easy overrides. Finally, an index alias is created to search only within documents relating to kubernetes.
+  */
+  "index_patterns": ["metricbeat-7.*"],
+  "settings": {
+    "number_of_shards": 1,
+    "number_of_replicas": 0
+  },
+  "aliases": {
+    "metricbeat-7-k8s": {
+      "filter": {
+        "term": {"fields.product.name": "k8s"}
+      }
+    }
+  },
+  "order": 0,
+  "version": 1
+}

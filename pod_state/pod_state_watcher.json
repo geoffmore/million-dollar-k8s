@@ -1,0 +1,144 @@
+POST _watcher/watch/pod_state
+{
+  "metadata": {},
+  "trigger": {
+    "schedule": {
+      "interval": "10m"
+    }
+  },
+  "input": {
+    "search": {
+      "request": {
+        "indices": [ "metricbeat-7-k8s" ],
+        "body": {
+          "size": 0,
+          "aggs": {
+    "clusters": {
+      "terms": {
+        "field": "fields.kubernetes.cluster.name.keyword"
+      },
+      "aggs": {
+        "nodes": {
+          "terms": {
+            "field": "kubernetes.node.name.keyword"
+          },
+          "aggs": {
+            "phases": {
+              "filters": {
+                "filters": {
+                  "running":   { "match": { "kubernetes.pod.status.phase": "running" }},
+                  "pending":   { "match": { "kubernetes.pod.status.phase": "pending" }},
+                  "failed":    { "match": { "kubernetes.pod.status.phase": "failed"  }},
+                  "succeeded": { "match": { "kubernetes.pod.status.phase": "succeeded" }},
+                  "unknown":   { "match": { "kubernetes.pod.status.phase": "unknown" }}
+                }
+              },
+              "aggs": {
+                "pods": {
+                  "cardinality": { "field": "kubernetes.pod.uid.keyword" }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+          "query": {
+    "bool": {
+      "must": [
+        {
+        "range": {
+          "@timestamp": {
+            "format": "strict_date_optional_time",
+            "gte": "now-10m"
+          }
+        }
+      },
+        {
+          "match": { "metricset.name": "state_pod" }
+        }
+      ],
+      "filter": [
+        {
+          "match_all": {}
+        }
+      ],
+      "should": [],
+      "must_not": []
+    }
+  }
+        }
+      }
+    }
+  },
+  "condition": {
+    "always": {}
+  },
+  "transform": {},
+  "actions": {
+    "info": {
+      "throttle_period": "50m",
+      "transform": {
+        "script": {
+          "source": """
+            String delim = '\\t';
+            //Debug.explain(ctx.payload.aggregations.clusters.buckets[0]['nodes']['buckets'][0]['phases']['buckets']['running']['pods'].value);
+            // Can my term aggregation for pod phase be anonymous? There is little reason to have form {running={doc_count=720, pods={value=12}}
+            List items = new ArrayList();
+            //List nodes = new ArrayList();
+            // buckets are ArrayLists
+            // fields are HashMaps
+            // every bucket has a key that is the name of the bucket
+            String nodeHeader;
+            // https://stackoverflow.com/questions/16021991/convert-object-from-a-hashmap-keyset-to-string
+            HashMap phaseMap = ctx.payload.aggregations.clusters.buckets[0]['nodes']['buckets'][0]['phases'];
+            String[] podPhases = phaseMap['buckets'].keySet().toArray(new String[phaseMap['buckets'].keySet().size()]);
+            
+            
+            ctx.payload.aggregations.clusters.buckets.forEach(c -> {
+              List nodes = new ArrayList();
+              //https://stackoverflow.com/questions/599161/best-way-to-convert-an-arraylist-to-a-string
+              StringBuilder sb = new StringBuilder();
+              sb.append("node\\t");
+              for (String s: podPhases)
+              {
+                sb.append(s);
+                sb.append("\\t");
+              }
+              nodes.add(sb.toString());
+              c.nodes.buckets.forEach(n -> {
+                StringBuilder nb = new StringBuilder();
+                nb.append(n.key);
+                nb.append("\\t");
+                for (String q: podPhases)
+                {
+                  nb.append(n['phases']['buckets'][q]['pods'].value);
+                  nb.append("\\t");
+                }
+                nodes.add(nb.toString());
+                //items.add(['name': c.key, 'nodes': n.key]);
+              });
+              items.add(['name': c.key, 'nodes': nodes]);
+            });
+            return ['items': items];
+          """,
+          "lang": "painless"
+        }
+      },
+      "slack": {
+        "message": {
+          "to": [ "#elastic-alerts" ],
+          "text": "Hourly pod_state alert",
+          "dynamic_attachments": {
+            "list_path": "ctx.payload.items",
+            "attachment_template": {
+              "title": "Cluster: {{ name }}",
+              "text": "Nodes: \n{{ nodes }}"
+            }
+          }
+        }
+      }
+    }
+  }
+}
